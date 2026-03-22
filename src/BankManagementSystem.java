@@ -76,6 +76,7 @@ public class BankManagementSystem {
         JTable custTable;
         JButton addCustBtn    = new JButton("Add Customer");
         JButton deleteCustBtn = new JButton("Delete Customer");
+        JButton createAccBtn  = new JButton("Create Account");
 
         // Accounts tab
         DefaultTableModel accModel;
@@ -83,6 +84,7 @@ public class BankManagementSystem {
         JButton approveLoanBtn = new JButton("Approve Loan");
         JButton repayLoanBtn   = new JButton("Record Repayment");
         JButton viewLoansBtn   = new JButton("View Loans");
+        JButton deactivateAccBtn = new JButton("Deactivate Account");
 
         // Loans tab
         DefaultTableModel loanModel;
@@ -125,6 +127,7 @@ public class BankManagementSystem {
 
             addCustBtn.setBounds(10, 8, 140, 28);    addCustBtn.addActionListener(this);    p.add(addCustBtn);
             deleteCustBtn.setBounds(160, 8, 150, 28); deleteCustBtn.addActionListener(this); p.add(deleteCustBtn);
+            createAccBtn.setBounds(320, 8, 150, 28); createAccBtn.addActionListener(this); p.add(createAccBtn);
 
             String[] cols = {"Customer ID", "Full Name", "Email", "Phone", "Gender", "Registered"};
             custModel = new DefaultTableModel(cols, 0) {
@@ -144,12 +147,40 @@ public class BankManagementSystem {
             approveLoanBtn.setBounds(10,  8, 140, 28); approveLoanBtn.addActionListener(this); p.add(approveLoanBtn);
             repayLoanBtn.setBounds(160,   8, 160, 28); repayLoanBtn.addActionListener(this);   p.add(repayLoanBtn);
             viewLoansBtn.setBounds(330,   8, 130, 28); viewLoansBtn.addActionListener(this);   p.add(viewLoansBtn);
+            deactivateAccBtn.setBounds(470, 8, 170, 28); deactivateAccBtn.addActionListener(this); p.add(deactivateAccBtn);
 
             String[] cols = {"Account No", "Customer ID", "Holder Name", "Type", "Balance", "Loan Balance", "Status"};
             accModel = new DefaultTableModel(cols, 0) {
                 public boolean isCellEditable(int r, int c) { return false; }
             };
             accTable = new JTable(accModel);
+            accTable.getColumnModel().getColumn(6).setCellRenderer(new DefaultTableCellRenderer() {
+                @Override
+                public Component getTableCellRendererComponent(JTable table, Object value,
+                                                               boolean isSelected, boolean hasFocus,
+                                                               int row, int column) {
+                    Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                    String status = (value == null) ? "" : value.toString().trim().toUpperCase();
+
+                    if (isSelected) {
+                        c.setBackground(table.getSelectionBackground());
+                        c.setForeground(table.getSelectionForeground());
+                        return c;
+                    }
+
+                    if (status.equals("ACTIVE")) {
+                        c.setBackground(new Color(198, 239, 206));
+                        c.setForeground(new Color(0, 97, 0));
+                    } else if (status.equals("CLOSED") || status.equals("INACTIVE") || status.equals("DEACTIVATED")) {
+                        c.setBackground(new Color(255, 199, 206));
+                        c.setForeground(new Color(156, 0, 6));
+                    } else {
+                        c.setBackground(Color.WHITE);
+                        c.setForeground(Color.BLACK);
+                    }
+                    return c;
+                }
+            });
             JScrollPane sc = new JScrollPane(accTable);
             sc.setBounds(5, 45, 905, 415); p.add(sc);
 
@@ -167,6 +198,33 @@ public class BankManagementSystem {
                 public boolean isCellEditable(int r, int c) { return false; }
             };
             loanTable = new JTable(loanModel);
+            loanTable.getColumnModel().getColumn(6).setCellRenderer(new DefaultTableCellRenderer() {
+                @Override
+                public Component getTableCellRendererComponent(JTable table, Object value,
+                                                               boolean isSelected, boolean hasFocus,
+                                                               int row, int column) {
+                    Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                    String status = (value == null) ? "" : value.toString().trim().toUpperCase();
+
+                    if (isSelected) {
+                        c.setBackground(table.getSelectionBackground());
+                        c.setForeground(table.getSelectionForeground());
+                        return c;
+                    }
+
+                    if (status.equals("ACTIVE")) {
+                        c.setBackground(new Color(198, 239, 206));
+                        c.setForeground(new Color(0, 97, 0));
+                    } else if (status.equals("CLOSED")) {
+                        c.setBackground(new Color(255, 235, 156));
+                        c.setForeground(new Color(102, 60, 0));
+                    } else {
+                        c.setBackground(Color.WHITE);
+                        c.setForeground(Color.BLACK);
+                    }
+                    return c;
+                }
+            });
             JScrollPane sc = new JScrollPane(loanTable);
             sc.setBounds(5, 45, 905, 415); p.add(sc);
 
@@ -241,15 +299,67 @@ public class BankManagementSystem {
             else if (e.getSource() == logoutBtn)     { new LoginFrame(); dispose(); }
             else if (e.getSource() == addCustBtn)    addCustomer();
             else if (e.getSource() == deleteCustBtn) deleteCustomer();
+            else if (e.getSource() == createAccBtn)  createAccount();
             else if (e.getSource() == approveLoanBtn) approveLoan();
             else if (e.getSource() == repayLoanBtn)   recordRepayment();
             else if (e.getSource() == viewLoansBtn)   viewAccountLoans();
+            else if (e.getSource() == deactivateAccBtn) deactivateAccount();
             else if (e.getSource() == closeLoanBtn)   closeLoan();
         }
 
         // Add customer
         void addCustomer() {
             new AddCustomerFrame(this);
+        }
+
+        // Create account
+        void createAccount() {
+            int row = custTable.getSelectedRow();
+            if (row < 0) { JOptionPane.showMessageDialog(this, "Select a customer first."); return; }
+
+            String custId = (String) custModel.getValueAt(row, 0);
+            String name = (String) custModel.getValueAt(row, 1);
+
+            String[] types = {"SAVINGS", "CURRENT"};
+            String accType = (String) JOptionPane.showInputDialog(
+                    this,
+                    "Create account for: " + name + " (" + custId + ")\nSelect account type:",
+                    "Account Type",
+                    JOptionPane.QUESTION_MESSAGE,
+                    null,
+                    types,
+                    types[0]
+            );
+            if (accType == null) return;
+
+            String depositInput = JOptionPane.showInputDialog(this,
+                    "Opening balance for " + accType + " account (Rs.):", "0");
+            if (depositInput == null || depositInput.trim().isEmpty()) return;
+
+            double openingBalance;
+            try {
+                openingBalance = Double.parseDouble(depositInput.trim());
+                if (openingBalance < 0) throw new NumberFormatException();
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(this, "Enter a valid non-negative amount."); return;
+            }
+
+            try (Connection con = getConnection();
+                 PreparedStatement ps = con.prepareStatement(
+                         "INSERT INTO accounts(account_number, customer_id, account_type, balance, loan_balance, status) " +
+                                 "VALUES('A'||LPAD(TO_CHAR(account_seq.NEXTVAL),6,'0'), ?, ?, ?, 0, 'ACTIVE')")) {
+                ps.setString(1, custId);
+                ps.setString(2, accType);
+                ps.setDouble(3, openingBalance);
+                ps.executeUpdate();
+
+                JOptionPane.showMessageDialog(this,
+                        accType + " account created for " + name + " with opening balance Rs." +
+                                String.format("%.2f", openingBalance));
+                loadAll();
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
+            }
         }
 
         // Delete customer
@@ -434,6 +544,55 @@ public class BankManagementSystem {
             new LoanHistoryFrame(accNo, name);
         }
 
+        // Deactivate account
+        void deactivateAccount() {
+            int row = accTable.getSelectedRow();
+            if (row < 0) { JOptionPane.showMessageDialog(this, "Select an account first."); return; }
+
+            String accNo = (String) accModel.getValueAt(row, 0);
+            String name = (String) accModel.getValueAt(row, 2);
+            String status = ((String) accModel.getValueAt(row, 6)).toUpperCase();
+            double loanBal = (double) accModel.getValueAt(row, 5);
+
+            if (!status.equals("ACTIVE")) {
+                JOptionPane.showMessageDialog(this, "Only active accounts can be deactivated."); return;
+            }
+            if (loanBal > 0) {
+                JOptionPane.showMessageDialog(this, "Cannot deactivate. This account has an active loan."); return;
+            }
+
+            try (Connection con = getConnection();
+                 PreparedStatement chk = con.prepareStatement(
+                         "SELECT COUNT(*) FROM loans WHERE account_number = ? AND status = 'ACTIVE'")) {
+                chk.setString(1, accNo);
+                ResultSet rs = chk.executeQuery();
+                rs.next();
+                if (rs.getInt(1) > 0) {
+                    JOptionPane.showMessageDialog(this, "Cannot deactivate. Active loan exists for this account.");
+                    return;
+                }
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
+                return;
+            }
+
+            int confirm = JOptionPane.showConfirmDialog(this,
+                    "Deactivate account " + accNo + " for " + name + "?",
+                    "Confirm Deactivate", JOptionPane.YES_NO_OPTION);
+            if (confirm != JOptionPane.YES_OPTION) return;
+
+            try (Connection con = getConnection();
+                 PreparedStatement ps = con.prepareStatement(
+                         "UPDATE accounts SET status = 'CLOSED' WHERE account_number = ?")) {
+                ps.setString(1, accNo);
+                ps.executeUpdate();
+                JOptionPane.showMessageDialog(this, "Account " + accNo + " deactivated.");
+                loadAll();
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
+            }
+        }
+
         // Close loan
         void closeLoan() {
             int row = loanTable.getSelectedRow();
@@ -533,7 +692,7 @@ public class BankManagementSystem {
                 ps.setString(4, gender);
                 ps.executeUpdate();
                 JOptionPane.showMessageDialog(this, "Customer \"" + name + "\" added successfully.");
-                panel.loadCustomers();
+                panel.loadAll();
                 dispose();
             } catch (SQLException ex) {
                 JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
