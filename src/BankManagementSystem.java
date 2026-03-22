@@ -344,17 +344,28 @@ public class BankManagementSystem {
                 JOptionPane.showMessageDialog(this, "Enter a valid non-negative amount."); return;
             }
 
-            try (Connection con = getConnection();
-                 PreparedStatement ps = con.prepareStatement(
-                         "INSERT INTO accounts(account_number, customer_id, account_type, balance, loan_balance, status) " +
-                                 "VALUES('A'||LPAD(TO_CHAR(account_seq.NEXTVAL),6,'0'), ?, ?, ?, 0, 'ACTIVE')")) {
-                ps.setString(1, custId);
-                ps.setString(2, accType);
-                ps.setDouble(3, openingBalance);
-                ps.executeUpdate();
+            try (Connection con = getConnection()) {
+                String nextAccNo;
+                try (PreparedStatement ps = con.prepareStatement(
+                        "SELECT 'A'||LPAD(TO_CHAR(NVL(MAX(TO_NUMBER(SUBSTR(account_number,2))),0)+1),6,'0') " +
+                                "FROM accounts")) {
+                    ResultSet rs = ps.executeQuery();
+                    rs.next();
+                    nextAccNo = rs.getString(1);
+                }
+
+                try (PreparedStatement ps = con.prepareStatement(
+                        "INSERT INTO accounts(account_number, customer_id, account_type, balance, loan_balance, status) " +
+                                "VALUES(?, ?, ?, ?, 0, 'ACTIVE')")) {
+                    ps.setString(1, nextAccNo);
+                    ps.setString(2, custId);
+                    ps.setString(3, accType);
+                    ps.setDouble(4, openingBalance);
+                    ps.executeUpdate();
+                }
 
                 JOptionPane.showMessageDialog(this,
-                        accType + " account created for " + name + " with opening balance Rs." +
+                        accType + " account " + nextAccNo + " created for " + name + " with opening balance Rs." +
                                 String.format("%.2f", openingBalance));
                 loadAll();
             } catch (SQLException ex) {
@@ -439,6 +450,14 @@ public class BankManagementSystem {
 
             try (Connection con = getConnection()) {
                 con.setAutoCommit(false);
+                String nextLoanId;
+
+                try (PreparedStatement ps = con.prepareStatement(
+                        "SELECT 'LN'||LPAD(TO_CHAR(NVL(MAX(TO_NUMBER(REGEXP_SUBSTR(loan_id,'[0-9]+'))),0)+1),6,'0') FROM loans")) {
+                    ResultSet rs = ps.executeQuery();
+                    rs.next();
+                    nextLoanId = rs.getString(1);
+                }
 
                 try (PreparedStatement ps = con.prepareStatement(
                         "UPDATE accounts SET balance = balance + ?, loan_balance = ? WHERE account_number = ?")) {
@@ -448,8 +467,10 @@ public class BankManagementSystem {
 
                 try (PreparedStatement ps = con.prepareStatement(
                         "INSERT INTO loans(loan_id, account_number, loan_amount, amount_paid, status) " +
-                                "VALUES('LN'||LPAD(TO_CHAR(loan_seq.NEXTVAL),6,'0'), ?, ?, 0, 'ACTIVE')")) {
-                    ps.setString(1, accNo); ps.setDouble(2, amount);
+                                "VALUES(?, ?, ?, 0, 'ACTIVE')")) {
+                    ps.setString(1, nextLoanId);
+                    ps.setString(2, accNo);
+                    ps.setDouble(3, amount);
                     ps.executeUpdate();
                 }
 
@@ -682,15 +703,24 @@ public class BankManagementSystem {
                 JOptionPane.showMessageDialog(this, "Name and Email are required."); return;
             }
 
-            try (Connection con = getConnection();
-                 PreparedStatement ps = con.prepareStatement(
-                         "INSERT INTO customers(customer_id, full_name, email, phone, gender) " +
-                                 "VALUES('C'||cust_seq.NEXTVAL, ?, ?, ?, ?)")) {
-                ps.setString(1, name);
-                ps.setString(2, email);
-                ps.setString(3, phone.isEmpty() ? null : phone);
-                ps.setString(4, gender);
-                ps.executeUpdate();
+            try (Connection con = getConnection()) {
+                String nextCustId;
+                try (PreparedStatement ps = con.prepareStatement(
+                        "SELECT 'C'||TO_CHAR(NVL(MAX(TO_NUMBER(REGEXP_SUBSTR(customer_id,'[0-9]+'))),0)+1) FROM customers")) {
+                    ResultSet rs = ps.executeQuery();
+                    rs.next();
+                    nextCustId = rs.getString(1);
+                }
+
+                try (PreparedStatement ps = con.prepareStatement(
+                        "INSERT INTO customers(customer_id, full_name, email, phone, gender) VALUES(?, ?, ?, ?, ?)")) {
+                    ps.setString(1, nextCustId);
+                    ps.setString(2, name);
+                    ps.setString(3, email);
+                    ps.setString(4, phone.isEmpty() ? null : phone);
+                    ps.setString(5, gender);
+                    ps.executeUpdate();
+                }
                 JOptionPane.showMessageDialog(this, "Customer \"" + name + "\" added successfully.");
                 panel.loadAll();
                 dispose();
