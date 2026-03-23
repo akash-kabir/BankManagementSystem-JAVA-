@@ -404,15 +404,15 @@ public class BankManagementSystem {
 
             try (Connection con = getConnection();
                  PreparedStatement ps = con.prepareStatement(
-                         "SELECT COUNT(*) FROM accounts WHERE customer_id = ?")) {
+                         "SELECT COUNT(*) FROM accounts WHERE customer_id = ? AND status = 'ACTIVE'")) {
                 ps.setString(1, custId);
                 ResultSet rs = ps.executeQuery();
                 rs.next();
-                int accCount = rs.getInt(1);
-                if (accCount > 0) {
+                int activeAccCount = rs.getInt(1);
+                if (activeAccCount > 0) {
                     JOptionPane.showMessageDialog(this,
-                            "Cannot delete " + name + ".\nThis customer has " + accCount +
-                                    " account(s).\nDelete or reassign their accounts first.");
+                            "Cannot delete " + name + ".\nThis customer has " + activeAccCount +
+                                    " active account(s).\nPlease deactivate all accounts before deleting.");
                     return;
                 }
             } catch (SQLException ex) {
@@ -424,13 +424,26 @@ public class BankManagementSystem {
                     "Confirm Delete", JOptionPane.YES_NO_OPTION);
             if (confirm != JOptionPane.YES_OPTION) return;
 
-            try (Connection con = getConnection();
-                 PreparedStatement ps = con.prepareStatement(
-                         "DELETE FROM customers WHERE customer_id = ?")) {
-                ps.setString(1, custId);
-                ps.executeUpdate();
-                JOptionPane.showMessageDialog(this, "Customer " + name + " deleted.");
-                loadCustomers();
+            try (Connection con = getConnection()) {
+                con.setAutoCommit(false);
+                
+                // Delete all closed accounts first
+                try (PreparedStatement ps = con.prepareStatement(
+                        "DELETE FROM accounts WHERE customer_id = ? AND status = 'CLOSED'")) {
+                    ps.setString(1, custId);
+                    ps.executeUpdate();
+                }
+                
+                // Then delete the customer
+                try (PreparedStatement ps = con.prepareStatement(
+                        "DELETE FROM customers WHERE customer_id = ?")) {
+                    ps.setString(1, custId);
+                    ps.executeUpdate();
+                }
+                
+                con.commit();
+                JOptionPane.showMessageDialog(this, "Customer " + name + " and their closed accounts deleted.");
+                loadAll();
             } catch (SQLException ex) {
                 JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
             }
@@ -837,9 +850,9 @@ public class BankManagementSystem {
                 }
             }
 
-            // Validate email format - must be username@gmail.com
-            if (!email.matches("^[a-zA-Z0-9._%-]+@gmail\\.com$")) {
-                JOptionPane.showMessageDialog(this, "Email must be in format: username@gmail.com"); return;
+            // Validate email format - must be valid email address
+            if (!email.matches("^[a-zA-Z0-9._%-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$")) {
+                JOptionPane.showMessageDialog(this, "Email must be in valid format: username@domain.com"); return;
             }
 
             try (Connection con = getConnection()) {
