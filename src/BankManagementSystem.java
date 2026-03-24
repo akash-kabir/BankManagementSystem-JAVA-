@@ -16,7 +16,7 @@ public class BankManagementSystem {
         try { Class.forName("oracle.jdbc.driver.OracleDriver"); }
         catch (ClassNotFoundException e) { throw new SQLException("Driver not found"); }
         return DriverManager.getConnection(
-                "jdbc:oracle:thin:@localhost:1521:xe", "kabir", "2025");
+                "jdbc:oracle:thin:@localhost:1521:xe", "mayank", "2405587");
     }
 
     // Login
@@ -24,11 +24,12 @@ public class BankManagementSystem {
 
         JTextField     userField = new JTextField();
         JPasswordField passField = new JPasswordField();
+        JCheckBox showPassCheckBox = new JCheckBox("Show Password");
         JButton loginBtn = new JButton("Login");
 
         LoginFrame() {
             setTitle("Bank Management System - Login");
-            setSize(320, 210);
+            setSize(320, 260);
             setDefaultCloseOperation(EXIT_ON_CLOSE);
             setLayout(null);
             setLocationRelativeTo(null);
@@ -47,11 +48,25 @@ public class BankManagementSystem {
             pl.setBounds(40, 98, 80, 25); add(pl);
             passField.setBounds(125, 98, 155, 25); add(passField);
 
-            loginBtn.setBounds(105, 140, 100, 30);
+            showPassCheckBox.setBounds(125, 128, 155, 25);
+            showPassCheckBox.addItemListener(e -> togglePasswordVisibility());
+            add(showPassCheckBox);
+
+            loginBtn.setBounds(105, 165, 100, 30);
             loginBtn.addActionListener(this);
             add(loginBtn);
 
             setVisible(true);
+        }
+
+        private void togglePasswordVisibility() {
+            if (showPassCheckBox.isSelected()) {
+                // Show password - set echo char to null
+                passField.setEchoChar((char) 0);
+            } else {
+                // Hide password - set echo char to default bullet
+                passField.setEchoChar('●');
+            }
         }
 
         public void actionPerformed(ActionEvent e) {
@@ -85,6 +100,7 @@ public class BankManagementSystem {
         JButton repayLoanBtn   = new JButton("Record Repayment");
         JButton viewLoansBtn   = new JButton("View Loans");
         JButton deactivateAccBtn = new JButton("Deactivate Account");
+        JButton reactivateAccBtn = new JButton("Reactivate Account");
 
         // Loans tab
         DefaultTableModel loanModel;
@@ -129,7 +145,7 @@ public class BankManagementSystem {
             deleteCustBtn.setBounds(160, 8, 150, 28); deleteCustBtn.addActionListener(this); p.add(deleteCustBtn);
             createAccBtn.setBounds(320, 8, 150, 28); createAccBtn.addActionListener(this); p.add(createAccBtn);
 
-            String[] cols = {"Customer ID", "Full Name", "Email", "Phone", "Gender", "Registered"};
+            String[] cols = {"Customer ID", "Full Name", "Email", "Phone", "Gender", "Registered", "No. of Accounts"};
             custModel = new DefaultTableModel(cols, 0) {
                 public boolean isCellEditable(int r, int c) { return false; }
             };
@@ -148,6 +164,7 @@ public class BankManagementSystem {
             repayLoanBtn.setBounds(160,   8, 160, 28); repayLoanBtn.addActionListener(this);   p.add(repayLoanBtn);
             viewLoansBtn.setBounds(330,   8, 130, 28); viewLoansBtn.addActionListener(this);   p.add(viewLoansBtn);
             deactivateAccBtn.setBounds(470, 8, 170, 28); deactivateAccBtn.addActionListener(this); p.add(deactivateAccBtn);
+            reactivateAccBtn.setBounds(650, 8, 160, 28); reactivateAccBtn.addActionListener(this); p.add(reactivateAccBtn);
 
             String[] cols = {"Account No", "Customer ID", "Holder Name", "Type", "Balance", "Loan Balance", "Status"};
             accModel = new DefaultTableModel(cols, 0) {
@@ -242,13 +259,16 @@ public class BankManagementSystem {
             custModel.setRowCount(0);
             try (Connection con = getConnection();
                  PreparedStatement ps = con.prepareStatement(
-                         "SELECT customer_id, full_name, email, phone, gender, " +
-                                 "TO_CHAR(created_date, 'DD-Mon-YYYY') FROM customers ORDER BY customer_id");
+                         "SELECT c.customer_id, c.full_name, c.email, c.phone, c.gender, " +
+                                 "TO_CHAR(c.created_date, 'DD-Mon-YYYY'), COUNT(a.account_number) " +
+                                 "FROM customers c LEFT JOIN accounts a ON c.customer_id = a.customer_id " +
+                                 "GROUP BY c.customer_id, c.full_name, c.email, c.phone, c.gender, c.created_date " +
+                                 "ORDER BY c.customer_id");
                  ResultSet rs = ps.executeQuery()) {
                 while (rs.next())
                     custModel.addRow(new Object[]{
                             rs.getString(1), rs.getString(2), rs.getString(3),
-                            rs.getString(4), rs.getString(5), rs.getString(6)});
+                            rs.getString(4), rs.getString(5), rs.getString(6), rs.getInt(7)});
             } catch (SQLException ex) {
                 JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
             }
@@ -304,6 +324,7 @@ public class BankManagementSystem {
             else if (e.getSource() == repayLoanBtn)   recordRepayment();
             else if (e.getSource() == viewLoansBtn)   viewAccountLoans();
             else if (e.getSource() == deactivateAccBtn) deactivateAccount();
+            else if (e.getSource() == reactivateAccBtn) reactivateAccount();
             else if (e.getSource() == closeLoanBtn)   closeLoan();
         }
 
@@ -383,15 +404,15 @@ public class BankManagementSystem {
 
             try (Connection con = getConnection();
                  PreparedStatement ps = con.prepareStatement(
-                         "SELECT COUNT(*) FROM accounts WHERE customer_id = ?")) {
+                         "SELECT COUNT(*) FROM accounts WHERE customer_id = ? AND status = 'ACTIVE'")) {
                 ps.setString(1, custId);
                 ResultSet rs = ps.executeQuery();
                 rs.next();
-                int accCount = rs.getInt(1);
-                if (accCount > 0) {
+                int activeAccCount = rs.getInt(1);
+                if (activeAccCount > 0) {
                     JOptionPane.showMessageDialog(this,
-                            "Cannot delete " + name + ".\nThis customer has " + accCount +
-                                    " account(s).\nDelete or reassign their accounts first.");
+                            "Cannot delete " + name + ".\nThis customer has " + activeAccCount +
+                                    " active account(s).\nPlease deactivate all accounts before deleting.");
                     return;
                 }
             } catch (SQLException ex) {
@@ -403,13 +424,26 @@ public class BankManagementSystem {
                     "Confirm Delete", JOptionPane.YES_NO_OPTION);
             if (confirm != JOptionPane.YES_OPTION) return;
 
-            try (Connection con = getConnection();
-                 PreparedStatement ps = con.prepareStatement(
-                         "DELETE FROM customers WHERE customer_id = ?")) {
-                ps.setString(1, custId);
-                ps.executeUpdate();
-                JOptionPane.showMessageDialog(this, "Customer " + name + " deleted.");
-                loadCustomers();
+            try (Connection con = getConnection()) {
+                con.setAutoCommit(false);
+                
+                // Delete all closed accounts first
+                try (PreparedStatement ps = con.prepareStatement(
+                        "DELETE FROM accounts WHERE customer_id = ? AND status = 'CLOSED'")) {
+                    ps.setString(1, custId);
+                    ps.executeUpdate();
+                }
+                
+                // Then delete the customer
+                try (PreparedStatement ps = con.prepareStatement(
+                        "DELETE FROM customers WHERE customer_id = ?")) {
+                    ps.setString(1, custId);
+                    ps.executeUpdate();
+                }
+                
+                con.commit();
+                JOptionPane.showMessageDialog(this, "Customer " + name + " and their closed accounts deleted.");
+                loadAll();
             } catch (SQLException ex) {
                 JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
             }
@@ -422,7 +456,15 @@ public class BankManagementSystem {
 
             String accNo  = (String) accModel.getValueAt(row, 0);
             String name   = (String) accModel.getValueAt(row, 2);
+            String status = ((String) accModel.getValueAt(row, 6)).toUpperCase();
             double existing = (double) accModel.getValueAt(row, 5);
+
+            // Check if account is closed
+            if (!status.equals("ACTIVE")) {
+                JOptionPane.showMessageDialog(this,
+                        "Cannot approve loan. Account " + accNo + " is " + status.toLowerCase() + ".");
+                return;
+            }
 
             if (existing > 0) {
                 JOptionPane.showMessageDialog(this,
@@ -432,20 +474,55 @@ public class BankManagementSystem {
             }
 
             String input = JOptionPane.showInputDialog(this,
-                    "Approve loan for: " + name + " (" + accNo + ")\nEnter loan amount (Rs.):");
+                    "Approve loan for: " + name + " (" + accNo + ")\nEnter principal amount (Rs.):");
             if (input == null || input.trim().isEmpty()) return;
 
-            double amount;
+            double principal;
             try {
-                amount = Double.parseDouble(input.trim());
-                if (amount <= 0) throw new NumberFormatException();
+                principal = Double.parseDouble(input.trim());
+                if (principal <= 0) throw new NumberFormatException();
             } catch (NumberFormatException ex) {
                 JOptionPane.showMessageDialog(this, "Enter a valid amount."); return;
             }
 
+            String interestInput = JOptionPane.showInputDialog(this,
+                    "Enter annual interest rate (%):", "5");
+            if (interestInput == null || interestInput.trim().isEmpty()) return;
+
+            double interestRate;
+            try {
+                interestRate = Double.parseDouble(interestInput.trim());
+                if (interestRate < 0) throw new NumberFormatException();
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(this, "Enter a valid interest rate."); return;
+            }
+
+            String durationInput = JOptionPane.showInputDialog(this,
+                    "Enter loan duration (years):", "1");
+            if (durationInput == null || durationInput.trim().isEmpty()) return;
+
+            double duration;
+            try {
+                duration = Double.parseDouble(durationInput.trim());
+                if (duration <= 0) throw new NumberFormatException();
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(this, "Enter a valid duration."); return;
+            }
+
+            // Calculate total amount with interest using simple interest formula
+            // Total = Principal + (Principal * Rate * Time / 100)
+            double totalInterest = (principal * interestRate * duration) / 100;
+            double totalAmount = principal + totalInterest;
+
             int confirm = JOptionPane.showConfirmDialog(this,
-                    "Approve loan of Rs." + String.format("%.2f", amount) + " to " + name + "?",
-                    "Confirm Loan", JOptionPane.YES_NO_OPTION);
+                    "Loan Details:\n" +
+                    "Principal Amount: Rs." + String.format("%.2f", principal) + "\n" +
+                    "Interest Rate: " + String.format("%.2f", interestRate) + "% per annum\n" +
+                    "Duration: " + String.format("%.2f", duration) + " years\n" +
+                    "Total Interest: Rs." + String.format("%.2f", totalInterest) + "\n" +
+                    "Total Amount: Rs." + String.format("%.2f", totalAmount) + "\n\n" +
+                    "Approve this loan?",
+                    "Confirm Loan Details", JOptionPane.YES_NO_OPTION);
             if (confirm != JOptionPane.YES_OPTION) return;
 
             try (Connection con = getConnection()) {
@@ -461,7 +538,9 @@ public class BankManagementSystem {
 
                 try (PreparedStatement ps = con.prepareStatement(
                         "UPDATE accounts SET balance = balance + ?, loan_balance = ? WHERE account_number = ?")) {
-                    ps.setDouble(1, amount); ps.setDouble(2, amount); ps.setString(3, accNo);
+                    ps.setDouble(1, totalAmount); 
+                    ps.setDouble(2, totalAmount); 
+                    ps.setString(3, accNo);
                     ps.executeUpdate();
                 }
 
@@ -470,13 +549,19 @@ public class BankManagementSystem {
                                 "VALUES(?, ?, ?, 0, 'ACTIVE')")) {
                     ps.setString(1, nextLoanId);
                     ps.setString(2, accNo);
-                    ps.setDouble(3, amount);
+                    ps.setDouble(3, totalAmount);
                     ps.executeUpdate();
                 }
 
                 con.commit();
                 JOptionPane.showMessageDialog(this,
-                        "Loan of Rs." + String.format("%.2f", amount) + " approved for " + name + ".");
+                        "Loan approved!\n\n" +
+                        "Loan ID: " + nextLoanId + "\n" +
+                        "Holder: " + name + "\n" +
+                        "Principal: Rs." + String.format("%.2f", principal) + "\n" +
+                        "Interest (" + String.format("%.2f", interestRate) + "% for " + 
+                        String.format("%.2f", duration) + " years): Rs." + String.format("%.2f", totalInterest) + "\n" +
+                        "Total Payable: Rs." + String.format("%.2f", totalAmount));
                 loadAll();
 
             } catch (SQLException ex) {
@@ -573,27 +658,29 @@ public class BankManagementSystem {
             String accNo = (String) accModel.getValueAt(row, 0);
             String name = (String) accModel.getValueAt(row, 2);
             String status = ((String) accModel.getValueAt(row, 6)).toUpperCase();
-            double loanBal = (double) accModel.getValueAt(row, 5);
 
+            // Check status
             if (!status.equals("ACTIVE")) {
                 JOptionPane.showMessageDialog(this, "Only active accounts can be deactivated."); return;
             }
-            if (loanBal > 0) {
-                JOptionPane.showMessageDialog(this, "Cannot deactivate. This account has an active loan."); return;
-            }
 
+            // Check for active loans in database (primary check)
+            int activeLoans = 0;
             try (Connection con = getConnection();
                  PreparedStatement chk = con.prepareStatement(
                          "SELECT COUNT(*) FROM loans WHERE account_number = ? AND status = 'ACTIVE'")) {
                 chk.setString(1, accNo);
                 ResultSet rs = chk.executeQuery();
                 rs.next();
-                if (rs.getInt(1) > 0) {
-                    JOptionPane.showMessageDialog(this, "Cannot deactivate. Active loan exists for this account.");
-                    return;
-                }
+                activeLoans = rs.getInt(1);
             } catch (SQLException ex) {
-                JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
+                JOptionPane.showMessageDialog(this, "Error checking loans: " + ex.getMessage());
+                return;
+            }
+
+            if (activeLoans > 0) {
+                JOptionPane.showMessageDialog(this, "Cannot deactivate. This account has " + activeLoans + 
+                        " active loan(s).\nPlease clear all loans before deactivating.");
                 return;
             }
 
@@ -607,7 +694,37 @@ public class BankManagementSystem {
                          "UPDATE accounts SET status = 'CLOSED' WHERE account_number = ?")) {
                 ps.setString(1, accNo);
                 ps.executeUpdate();
-                JOptionPane.showMessageDialog(this, "Account " + accNo + " deactivated.");
+                JOptionPane.showMessageDialog(this, "Account " + accNo + " deactivated successfully.");
+                loadAll();
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
+            }
+        }
+
+        // Reactivate account
+        void reactivateAccount() {
+            int row = accTable.getSelectedRow();
+            if (row < 0) { JOptionPane.showMessageDialog(this, "Select an account first."); return; }
+
+            String accNo = (String) accModel.getValueAt(row, 0);
+            String name = (String) accModel.getValueAt(row, 2);
+            String status = ((String) accModel.getValueAt(row, 6)).toUpperCase();
+
+            if (!status.equals("CLOSED")) {
+                JOptionPane.showMessageDialog(this, "Only closed accounts can be reactivated."); return;
+            }
+
+            int confirm = JOptionPane.showConfirmDialog(this,
+                    "Reactivate account " + accNo + " for " + name + "?",
+                    "Confirm Reactivate", JOptionPane.YES_NO_OPTION);
+            if (confirm != JOptionPane.YES_OPTION) return;
+
+            try (Connection con = getConnection();
+                 PreparedStatement ps = con.prepareStatement(
+                         "UPDATE accounts SET status = 'ACTIVE' WHERE account_number = ?")) {
+                ps.setString(1, accNo);
+                ps.executeUpdate();
+                JOptionPane.showMessageDialog(this, "Account " + accNo + " reactivated.");
                 loadAll();
             } catch (SQLException ex) {
                 JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
@@ -663,7 +780,7 @@ public class BankManagementSystem {
         AddCustomerFrame(MainPanel panel) {
             this.panel = panel;
             setTitle("Add New Customer");
-            setSize(360, 270);
+            setSize(380, 310);
             setLayout(null);
             setLocationRelativeTo(null);
             setResizable(false);
@@ -674,21 +791,44 @@ public class BankManagementSystem {
             add(title);
 
             JLabel nl = new JLabel("Full Name *:");  nl.setBounds(20,  50, 110, 25); add(nl);
-            nameField.setBounds(135,  50, 190, 25); add(nameField);
+            nameField.setBounds(135,  50, 210, 25); add(nameField);
 
             JLabel el = new JLabel("Email *:");      el.setBounds(20,  88, 110, 25); add(el);
-            emailField.setBounds(135, 88, 190, 25); add(emailField);
+            emailField.setBounds(135, 88, 210, 25); add(emailField);
 
             JLabel pl = new JLabel("Phone:");        pl.setBounds(20, 126, 110, 25); add(pl);
-            phoneField.setBounds(135, 126, 190, 25); add(phoneField);
+            phoneField.setBounds(135, 126, 210, 25);
+            setupPhoneField();
+            add(phoneField);
 
             JLabel gl = new JLabel("Gender:");       gl.setBounds(20, 164, 110, 25); add(gl);
-            genderBox.setBounds(135, 164, 190, 25); add(genderBox);
+            genderBox.setBounds(135, 164, 210, 25); add(genderBox);
 
-            saveBtn.setBounds(65,   210, 100, 30); saveBtn.addActionListener(this);   add(saveBtn);
-            cancelBtn.setBounds(190, 210, 100, 30); cancelBtn.addActionListener(this); add(cancelBtn);
+            saveBtn.setBounds(60,   250, 100, 30); saveBtn.addActionListener(this);   add(saveBtn);
+            cancelBtn.setBounds(205, 250, 100, 30); cancelBtn.addActionListener(this); add(cancelBtn);
 
             setVisible(true);
+        }
+
+        private void setupPhoneField() {
+            phoneField.setDocument(new javax.swing.text.PlainDocument() {
+                @Override
+                public void insertString(int offset, String str, javax.swing.text.AttributeSet attr) throws javax.swing.text.BadLocationException {
+                    if (str == null) return;
+                    
+                    // Filter to allow only digits
+                    String filtered = str.replaceAll("[^0-9]", "");
+                    
+                    // Check if adding this would exceed 10 digits
+                    if (getLength() + filtered.length() > 10) {
+                        filtered = filtered.substring(0, Math.max(0, 10 - getLength()));
+                    }
+                    
+                    if (!filtered.isEmpty()) {
+                        super.insertString(offset, filtered, attr);
+                    }
+                }
+            });
         }
 
         public void actionPerformed(ActionEvent e) {
@@ -701,6 +841,18 @@ public class BankManagementSystem {
 
             if (name.isEmpty() || email.isEmpty()) {
                 JOptionPane.showMessageDialog(this, "Name and Email are required."); return;
+            }
+
+            // Validate phone number - must be exactly 10 digits
+            if (!phone.isEmpty()) {
+                if (!phone.matches("\\d{10}")) {
+                    JOptionPane.showMessageDialog(this, "Phone must be exactly 10 digits."); return;
+                }
+            }
+
+            // Validate email format - must be valid email address
+            if (!email.matches("^[a-zA-Z0-9._%-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$")) {
+                JOptionPane.showMessageDialog(this, "Email must be in valid format: username@domain.com"); return;
             }
 
             try (Connection con = getConnection()) {
